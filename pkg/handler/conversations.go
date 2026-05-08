@@ -104,8 +104,8 @@ type addMessageParams struct {
 type rawSlackBlock map[string]any
 
 func (b rawSlackBlock) BlockType() slack.MessageBlockType {
-	if typ, ok := b["type"].(string); ok {
-		return slack.MessageBlockType(typ)
+	if blockType, ok := b["type"].(string); ok {
+		return slack.MessageBlockType(blockType)
 	}
 	return ""
 }
@@ -255,7 +255,9 @@ func (ch *ConversationsHandler) ConversationsAddMessageHandler(ctx context.Conte
 	}
 
 	if len(params.blocks) > 0 {
-		options = append(options, slack.MsgOptionText(params.text, false))
+		if params.text != "" {
+			options = append(options, slack.MsgOptionText(params.text, false))
+		}
 		options = append(options, slack.MsgOptionBlocks(params.blocks...))
 	} else {
 		switch params.contentType {
@@ -1813,21 +1815,20 @@ func (ch *ConversationsHandler) parseParamsToolAddMessage(ctx context.Context, r
 		// Backward compatibility with "payload" parameter
 		msgText = request.GetString("payload", "")
 	}
+	blocks, err := parseRawBlocks(request)
+	if err != nil {
+		ch.logger.Error("Invalid blocks", zap.Error(err))
+		return nil, err
+	}
+	if msgText == "" && len(blocks) == 0 {
+		ch.logger.Error("Message text and blocks missing")
+		return nil, errors.New("text or blocks must be provided")
+	}
 
 	contentType := request.GetString("content_type", "text/markdown")
 	if contentType != "text/plain" && contentType != "text/markdown" {
 		ch.logger.Error("Invalid content_type", zap.String("content_type", contentType))
 		return nil, errors.New("content_type must be either 'text/plain' or 'text/markdown'")
-	}
-
-	blocks, err := parseRawBlocks(request.GetArguments()["blocks"])
-	if err != nil {
-		ch.logger.Error("Invalid blocks", zap.Error(err))
-		return nil, err
-	}
-	if msgText == "" {
-		ch.logger.Error("Message text missing")
-		return nil, errors.New("text or payload must be a string")
 	}
 
 	return &addMessageParams{
@@ -1839,29 +1840,36 @@ func (ch *ConversationsHandler) parseParamsToolAddMessage(ctx context.Context, r
 	}, nil
 }
 
-func parseRawBlocks(value any) ([]slack.Block, error) {
-	if value == nil {
+func parseRawBlocks(request mcp.CallToolRequest) ([]slack.Block, error) {
+	args := request.GetArguments()
+	if args == nil {
+		return nil, nil
+	}
+	blocksArg, ok := args["blocks"]
+	if !ok || blocksArg == nil {
 		return nil, nil
 	}
 
-	raw, err := json.Marshal(value)
+	blocksJSON, err := json.Marshal(blocksArg)
 	if err != nil {
-		return nil, fmt.Errorf("blocks must be a JSON array of Block Kit objects: %w", err)
+		return nil, fmt.Errorf("blocks must be valid JSON: %w", err)
 	}
 
-	var blockMaps []map[string]any
-	if err := json.Unmarshal(raw, &blockMaps); err != nil {
-		return nil, fmt.Errorf("blocks must be a JSON array of Block Kit objects: %w", err)
+	var rawBlocks []rawSlackBlock
+	if err := json.Unmarshal(blocksJSON, &rawBlocks); err != nil {
+		return nil, fmt.Errorf("blocks must be an array of Slack Block Kit block objects: %w", err)
+	}
+	if len(rawBlocks) == 0 {
+		return nil, errors.New("blocks must not be empty when provided")
 	}
 
-	blocks := make([]slack.Block, 0, len(blockMaps))
-	for i, blockMap := range blockMaps {
-		if blockType, ok := blockMap["type"].(string); !ok || blockType == "" {
-			return nil, fmt.Errorf("blocks[%d].type must be a string", i)
+	blocks := make([]slack.Block, 0, len(rawBlocks))
+	for i, block := range rawBlocks {
+		if block.BlockType() == "" {
+			return nil, fmt.Errorf("blocks[%d].type is required", i)
 		}
-		blocks = append(blocks, rawSlackBlock(blockMap))
+		blocks = append(blocks, block)
 	}
-
 	return blocks, nil
 }
 

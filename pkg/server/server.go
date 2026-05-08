@@ -195,6 +195,13 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 				}),
 				mcp.Description("Optional raw Slack Block Kit blocks array. Supports newer block types such as type='table'. Slack supports only one table block per message and renders it at the bottom; put explanatory section blocks before the table, and post any recap that must appear after the table as a second message or thread reply."),
 			),
+			mcp.WithArray("blocks",
+				mcp.Description("Optional raw Slack Block Kit blocks array. When provided, blocks are sent directly to Slack and text/payload is used only as fallback text."),
+				mcp.Items(map[string]any{
+					"type":                 "object",
+					"additionalProperties": true,
+				}),
+			),
 		), conversationsHandler.ConversationsAddMessageHandler)
 	}
 
