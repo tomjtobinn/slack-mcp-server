@@ -179,11 +179,21 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 				mcp.Description("Unique identifier of either a thread's parent message or a message in the thread_ts must be the timestamp in format 1234567890.123456 of an existing message with 0 or more replies. Optional, if not provided the message will be added to the channel itself, otherwise it will be added to the thread."),
 			),
 			mcp.WithString("text",
-				mcp.Description("Message text in specified content_type format. Example: 'Hello, world!' for text/plain or '# Hello, world!' for text/markdown."),
+				mcp.Description("Message text in specified content_type format. Example: 'Hello, world!' for text/plain or '# Hello, world!' for text/markdown. Used as fallback notification text when blocks are provided."),
+			),
+			mcp.WithString("payload",
+				mcp.Description("Backward-compatible fallback text. When raw Block Kit blocks are provided, use this as the fallback/notification text if text is not set."),
 			),
 			mcp.WithString("content_type",
 				mcp.DefaultString("text/markdown"),
-				mcp.Description("Content type of the message. Default is 'text/markdown'. Allowed values: 'text/markdown', 'text/plain'."),
+				mcp.Description("Content type of the text message. Ignored when raw Block Kit blocks are provided. Default is 'text/markdown'. Allowed values: 'text/markdown', 'text/plain'."),
+			),
+			mcp.WithArray("blocks",
+				mcp.Items(map[string]any{
+					"type":                 "object",
+					"additionalProperties": true,
+				}),
+				mcp.Description("Optional raw Slack Block Kit blocks array. Supports newer block types such as type='table'. Slack supports only one table block per message and renders it at the bottom; put explanatory section blocks before the table, and post any recap that must appear after the table as a second message or thread reply."),
 			),
 		), conversationsHandler.ConversationsAddMessageHandler)
 	}
