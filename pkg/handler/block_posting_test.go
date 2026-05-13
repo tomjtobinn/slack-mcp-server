@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseRawBlocksAcceptsSlackTableBlock(t *testing.T) {
+func TestUnitParseRawBlocksAcceptsSlackTableBlock(t *testing.T) {
 	blocks, err := parseRawBlocks(mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
 			Arguments: map[string]any{
@@ -33,7 +33,7 @@ func TestParseRawBlocksAcceptsSlackTableBlock(t *testing.T) {
 	require.Equal(t, "table", string(blocks[0].BlockType()))
 }
 
-func TestParseRawBlocksRejectsBlockWithoutType(t *testing.T) {
+func TestUnitParseRawBlocksRejectsBlockWithoutType(t *testing.T) {
 	_, err := parseRawBlocks(mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
 			Arguments: map[string]any{
