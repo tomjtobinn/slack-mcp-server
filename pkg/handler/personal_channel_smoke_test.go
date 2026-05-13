@@ -1,11 +1,16 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
 	"os"
 	"strings"
 	"testing"
@@ -128,7 +133,7 @@ func TestIntegrationPersonalChannelSlackOnlyLoop(t *testing.T) {
 		"filename":        "slack-mcp-personal-smoke-test.png",
 		"title":           "Slack MCP personal smoke test image",
 		"initial_comment": "Slack MCP personal-channel smoke test: PNG image upload.",
-		"content_base64":  smokeTestPNGBase64,
+		"content_base64":  smokeTestPNGBase64(t),
 	}))
 	require.Equal(t, channelID, imageUpload.Channel)
 
@@ -136,8 +141,6 @@ func TestIntegrationPersonalChannelSlackOnlyLoop(t *testing.T) {
 	require.Contains(t, repliesText, textUpload.FileID)
 	require.Contains(t, repliesText, imageUpload.FileID)
 }
-
-const smokeTestPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR42mP8z8BQDwAFgwJ/luzr7wAAAABJRU5ErkJggg=="
 
 func callSmokeTool(t *testing.T, ctx context.Context, c *client.Client, name string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
@@ -177,6 +180,21 @@ func parseUploadResult(t *testing.T, result *mcp.CallToolResult) struct {
 	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &upload))
 	require.NotEmpty(t, upload.FileID)
 	return upload
+}
+
+func smokeTestPNGBase64(t *testing.T) string {
+	t.Helper()
+
+	img := image.NewRGBA(image.Rect(0, 0, 320, 180))
+	draw.Draw(img, img.Bounds(), &image.Uniform{C: color.RGBA{R: 245, G: 247, B: 250, A: 255}}, image.Point{}, draw.Src)
+	draw.Draw(img, image.Rect(0, 0, 320, 48), &image.Uniform{C: color.RGBA{R: 24, G: 144, B: 219, A: 255}}, image.Point{}, draw.Src)
+	draw.Draw(img, image.Rect(28, 78, 292, 132), &image.Uniform{C: color.RGBA{R: 36, G: 43, B: 54, A: 255}}, image.Point{}, draw.Src)
+	draw.Draw(img, image.Rect(40, 92, 102, 118), &image.Uniform{C: color.RGBA{R: 255, G: 255, B: 255, A: 255}}, image.Point{}, draw.Src)
+	draw.Draw(img, image.Rect(118, 92, 280, 118), &image.Uniform{C: color.RGBA{R: 96, G: 211, B: 148, A: 255}}, image.Point{}, draw.Src)
+
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, img))
+	return base64.StdEncoding.EncodeToString(buf.Bytes())
 }
 
 func waitForThreadFiles(t *testing.T, ctx context.Context, c *client.Client, channelID, threadTS string, fileIDs ...string) string {
