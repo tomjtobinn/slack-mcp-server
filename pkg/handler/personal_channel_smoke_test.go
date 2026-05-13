@@ -61,53 +61,88 @@ func TestIntegrationPersonalChannelSlackOnlyLoop(t *testing.T) {
 	_, err = mcpClient.Initialize(ctx, initReq)
 	require.NoError(t, err)
 
-	messageText := "Slack MCP personal-channel smoke test: raw Block Kit post"
+	messageText := "Slack MCP personal-channel smoke test: text-only post"
 	messageResult := callSmokeTool(t, ctx, mcpClient, "conversations_add_message", map[string]any{
+		"channel_id":   channelID,
+		"text":         messageText,
+		"content_type": "text/plain",
+	})
+	messageTS := firstCSVValue(t, messageResult, "MsgID")
+	require.NotEmpty(t, messageTS)
+
+	callSmokeTool(t, ctx, mcpClient, "conversations_add_message", map[string]any{
 		"channel_id": channelID,
-		"text":       messageText,
+		"thread_ts":  messageTS,
 		"blocks": []any{
 			map[string]any{
 				"type": "section",
 				"text": map[string]any{
 					"type": "mrkdwn",
-					"text": "*" + messageText + "*",
+					"text": "*Slack MCP personal-channel smoke test: blocks-only post*",
 				},
 			},
 			map[string]any{
 				"type": "context",
 				"elements": []any{
-					map[string]any{"type": "mrkdwn", "text": "`conversations_add_message` raw blocks path"},
+					map[string]any{"type": "mrkdwn", "text": "`conversations_add_message` raw blocks-only path"},
 				},
 			},
 		},
 	})
-	messageTS := firstCSVValue(t, messageResult, "MsgID")
-	require.NotEmpty(t, messageTS)
 
-	uploadResult := callSmokeTool(t, ctx, mcpClient, "files_upload", map[string]any{
+	mixedText := "Slack MCP personal-channel smoke test: mixed text and raw blocks post"
+	callSmokeTool(t, ctx, mcpClient, "conversations_add_message", map[string]any{
+		"channel_id": channelID,
+		"thread_ts":  messageTS,
+		"text":       mixedText,
+		"blocks": []any{
+			map[string]any{
+				"type": "section",
+				"text": map[string]any{
+					"type": "mrkdwn",
+					"text": "*" + mixedText + "*",
+				},
+			},
+			map[string]any{
+				"type": "context",
+				"elements": []any{
+					map[string]any{"type": "mrkdwn", "text": "`conversations_add_message` raw blocks plus fallback text path"},
+				},
+			},
+		},
+	})
+
+	textUpload := parseUploadResult(t, callSmokeTool(t, ctx, mcpClient, "files_upload", map[string]any{
 		"channel_id":      channelID,
 		"thread_ts":       messageTS,
 		"filename":        "slack-mcp-personal-smoke-test.txt",
 		"title":           "Slack MCP personal smoke test",
 		"initial_comment": "Slack MCP personal-channel smoke test: files_upload with base64 content.",
 		"content_base64":  base64.StdEncoding.EncodeToString([]byte("Slack MCP personal-channel smoke test\n")),
-	})
+	}))
+	require.Equal(t, channelID, textUpload.Channel)
 
-	var upload struct {
-		FileID  string `json:"file_id"`
-		Channel string `json:"channel_id"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(toolText(t, uploadResult)), &upload))
-	require.NotEmpty(t, upload.FileID)
-	require.Equal(t, channelID, upload.Channel)
+	imageUpload := parseUploadResult(t, callSmokeTool(t, ctx, mcpClient, "files_upload", map[string]any{
+		"channel_id":      channelID,
+		"thread_ts":       messageTS,
+		"filename":        "slack-mcp-personal-smoke-test.png",
+		"title":           "Slack MCP personal smoke test image",
+		"initial_comment": "Slack MCP personal-channel smoke test: PNG image upload.",
+		"content_base64":  smokeTestPNGBase64,
+	}))
+	require.Equal(t, channelID, imageUpload.Channel)
 
 	repliesResult := callSmokeTool(t, ctx, mcpClient, "conversations_replies", map[string]any{
 		"channel_id": channelID,
 		"thread_ts":  messageTS,
-		"limit":      "10",
+		"limit":      "20",
 	})
-	require.Contains(t, toolText(t, repliesResult), upload.FileID)
+	repliesText := toolText(t, repliesResult)
+	require.Contains(t, repliesText, textUpload.FileID)
+	require.Contains(t, repliesText, imageUpload.FileID)
 }
+
+const smokeTestPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR42mP8z8BQDwAFgwJ/luzr7wAAAABJRU5ErkJggg=="
 
 func callSmokeTool(t *testing.T, ctx context.Context, c *client.Client, name string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
@@ -132,6 +167,21 @@ func toolText(t *testing.T, result *mcp.CallToolResult) string {
 		}
 	}
 	return out.String()
+}
+
+func parseUploadResult(t *testing.T, result *mcp.CallToolResult) struct {
+	FileID  string `json:"file_id"`
+	Channel string `json:"channel_id"`
+} {
+	t.Helper()
+
+	var upload struct {
+		FileID  string `json:"file_id"`
+		Channel string `json:"channel_id"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &upload))
+	require.NotEmpty(t, upload.FileID)
+	return upload
 }
 
 func firstCSVValue(t *testing.T, result *mcp.CallToolResult, field string) string {
