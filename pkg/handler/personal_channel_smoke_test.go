@@ -132,12 +132,7 @@ func TestIntegrationPersonalChannelSlackOnlyLoop(t *testing.T) {
 	}))
 	require.Equal(t, channelID, imageUpload.Channel)
 
-	repliesResult := callSmokeTool(t, ctx, mcpClient, "conversations_replies", map[string]any{
-		"channel_id": channelID,
-		"thread_ts":  messageTS,
-		"limit":      "20",
-	})
-	repliesText := toolText(t, repliesResult)
+	repliesText := waitForThreadFiles(t, ctx, mcpClient, channelID, messageTS, textUpload.FileID, imageUpload.FileID)
 	require.Contains(t, repliesText, textUpload.FileID)
 	require.Contains(t, repliesText, imageUpload.FileID)
 }
@@ -182,6 +177,28 @@ func parseUploadResult(t *testing.T, result *mcp.CallToolResult) struct {
 	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &upload))
 	require.NotEmpty(t, upload.FileID)
 	return upload
+}
+
+func waitForThreadFiles(t *testing.T, ctx context.Context, c *client.Client, channelID, threadTS string, fileIDs ...string) string {
+	t.Helper()
+
+	var repliesText string
+	require.Eventually(t, func() bool {
+		repliesResult := callSmokeTool(t, ctx, c, "conversations_replies", map[string]any{
+			"channel_id": channelID,
+			"thread_ts":  threadTS,
+			"limit":      "20",
+		})
+		repliesText = toolText(t, repliesResult)
+		for _, fileID := range fileIDs {
+			if !strings.Contains(repliesText, fileID) {
+				return false
+			}
+		}
+		return true
+	}, 30*time.Second, 2*time.Second)
+
+	return repliesText
 }
 
 func firstCSVValue(t *testing.T, result *mcp.CallToolResult, field string) string {

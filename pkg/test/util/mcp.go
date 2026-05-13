@@ -146,7 +146,7 @@ func SetupMCP(cfg MCPConfig) (*MCPConnection, error) {
 		close(done)
 	}()
 
-	const bootTimeout = 30 * time.Second
+	const bootTimeout = 90 * time.Second
 	select {
 	case <-ready:
 		// ready to go
