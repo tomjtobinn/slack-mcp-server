@@ -280,7 +280,7 @@ The posting and file upload path has an opt-in Slack-only smoke test that does n
 SLACK_MCP_PERSONAL_TEST_CHANNEL=D04ENRL3M97 go test ./pkg/handler -run TestIntegrationPersonalChannelSlackOnlyLoop -count=1 -v
 ```
 
-The test starts a local SSE MCP server, posts text-only, raw Block Kit only, and mixed text/raw Block Kit messages to the configured channel, uploads a small base64 text file and a PNG image in the message thread, then reads the thread back through Slack to verify the uploaded files appear.
+The test starts a local SSE MCP server, posts text-only, raw Block Kit only, mixed text/raw Block Kit, and native table Block Kit messages to the configured channel, uploads a small base64 text file and a PNG image in the message thread, then reads the thread back through Slack to verify the uploaded files appear.
 
 ### Limitations matrix & Cache
 

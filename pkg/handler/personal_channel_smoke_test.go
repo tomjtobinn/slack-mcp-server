@@ -117,6 +117,23 @@ func TestIntegrationPersonalChannelSlackOnlyLoop(t *testing.T) {
 		},
 	})
 
+	tableText := "Slack MCP personal-channel smoke test: native table block post"
+	callSmokeTool(t, ctx, mcpClient, "conversations_add_message", map[string]any{
+		"channel_id": channelID,
+		"thread_ts":  messageTS,
+		"text":       tableText,
+		"blocks": []any{
+			map[string]any{
+				"type": "section",
+				"text": map[string]any{
+					"type": "mrkdwn",
+					"text": "*" + tableText + "*",
+				},
+			},
+			smokeTestTableBlock(),
+		},
+	})
+
 	textUpload := parseUploadResult(t, callSmokeTool(t, ctx, mcpClient, "files_upload", map[string]any{
 		"channel_id":      channelID,
 		"thread_ts":       messageTS,
@@ -195,6 +212,34 @@ func smokeTestPNGBase64(t *testing.T) string {
 	var buf bytes.Buffer
 	require.NoError(t, png.Encode(&buf, img))
 	return base64.StdEncoding.EncodeToString(buf.Bytes())
+}
+
+func smokeTestTableBlock() map[string]any {
+	return map[string]any{
+		"type": "table",
+		"rows": []any{
+			[]any{
+				map[string]any{"type": "raw_text", "text": "Vector"},
+				map[string]any{"type": "raw_text", "text": "Expected"},
+				map[string]any{"type": "raw_text", "text": "Status"},
+			},
+			[]any{
+				map[string]any{"type": "raw_text", "text": "Text"},
+				map[string]any{"type": "raw_text", "text": "plain post"},
+				map[string]any{"type": "raw_text", "text": "ok"},
+			},
+			[]any{
+				map[string]any{"type": "raw_text", "text": "Blocks"},
+				map[string]any{"type": "raw_text", "text": "raw Block Kit"},
+				map[string]any{"type": "raw_text", "text": "ok"},
+			},
+			[]any{
+				map[string]any{"type": "raw_text", "text": "Upload"},
+				map[string]any{"type": "raw_text", "text": "file and image"},
+				map[string]any{"type": "raw_text", "text": "ok"},
+			},
+		},
+	}
 }
 
 func waitForThreadFiles(t *testing.T, ctx context.Context, c *client.Client, channelID, threadTS string, fileIDs ...string) string {
