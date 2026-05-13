@@ -18,6 +18,8 @@ type MCPConfig struct {
 	SSEKey             string
 	MessageToolEnabled bool
 	MessageToolMark    bool
+	MessageToolPolicy  string
+	FileUploadPolicy   string
 	EnabledTools       []string // List of enabled tools (empty = all tools)
 }
 
@@ -29,8 +31,11 @@ type MCPConnection struct {
 
 func SetupMCP(cfg MCPConfig) (*MCPConnection, error) {
 	xoxp := os.Getenv("SLACK_MCP_XOXP_TOKEN")
-	if xoxp == "" {
-		return nil, fmt.Errorf("SLACK_MCP_XOXP_TOKEN not set")
+	xoxb := os.Getenv("SLACK_MCP_XOXB_TOKEN")
+	xoxc := os.Getenv("SLACK_MCP_XOXC_TOKEN")
+	xoxd := os.Getenv("SLACK_MCP_XOXD_TOKEN")
+	if xoxp == "" && xoxb == "" && (xoxc == "" || xoxd == "") {
+		return nil, fmt.Errorf("one Slack auth method must be set: SLACK_MCP_XOXP_TOKEN, SLACK_MCP_XOXB_TOKEN, or both SLACK_MCP_XOXC_TOKEN and SLACK_MCP_XOXD_TOKEN")
 	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -56,14 +61,38 @@ func SetupMCP(cfg MCPConfig) (*MCPConnection, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	cmd.Env = append(os.Environ(),
-		"SLACK_MCP_XOXP_TOKEN="+xoxp,
 		"SLACK_MCP_HOST="+host,
 		"SLACK_MCP_PORT="+strconv.Itoa(port),
-		"SLACK_MCP_ADD_MESSAGE_TOOL=true",
 		"SLACK_MCP_API_KEY="+cfg.SSEKey,
 		"SLACK_MCP_USERS_CACHE=/tmp/users_cache.json",
 		"SLACK_MCP_CHANNELS_CACHE=/tmp/channels_cache_v3.json",
 	)
+
+	if xoxp != "" {
+		cmd.Env = append(cmd.Env, "SLACK_MCP_XOXP_TOKEN="+xoxp)
+	}
+	if xoxb != "" {
+		cmd.Env = append(cmd.Env, "SLACK_MCP_XOXB_TOKEN="+xoxb)
+	}
+	if xoxc != "" {
+		cmd.Env = append(cmd.Env, "SLACK_MCP_XOXC_TOKEN="+xoxc)
+	}
+	if xoxd != "" {
+		cmd.Env = append(cmd.Env, "SLACK_MCP_XOXD_TOKEN="+xoxd)
+	}
+	if cfg.MessageToolEnabled {
+		policy := cfg.MessageToolPolicy
+		if policy == "" {
+			policy = "true"
+		}
+		cmd.Env = append(cmd.Env, "SLACK_MCP_ADD_MESSAGE_TOOL="+policy)
+	}
+	if cfg.MessageToolMark {
+		cmd.Env = append(cmd.Env, "SLACK_MCP_ADD_MESSAGE_MARK=true")
+	}
+	if cfg.FileUploadPolicy != "" {
+		cmd.Env = append(cmd.Env, "SLACK_MCP_FILE_UPLOAD_TOOL="+cfg.FileUploadPolicy)
+	}
 
 	if len(cfg.EnabledTools) > 0 {
 		cmd.Env = append(cmd.Env, "SLACK_MCP_ENABLED_TOOLS="+strings.Join(cfg.EnabledTools, ","))

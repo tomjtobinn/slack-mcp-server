@@ -272,6 +272,16 @@ Fetches a CSV directory of all users in the workspace.
 
 *You need one of: `xoxp` (user), `xoxb` (bot), or both `xoxc`/`xoxd` tokens for authentication.
 
+### Personal Slack Smoke Test
+
+The posting and file upload path has an opt-in Slack-only smoke test that does not use ngrok or OpenAI. Set a personal DM/channel ID and Slack auth env, then run:
+
+```bash
+SLACK_MCP_PERSONAL_TEST_CHANNEL=D04ENRL3M97 go test ./pkg/handler -run TestIntegrationPersonalChannelSlackOnlyLoop -count=1 -v
+```
+
+The test starts a local SSE MCP server, posts a raw Block Kit message to the configured channel, uploads a small base64 text file in the message thread, then reads the thread back through Slack to verify the uploaded file appears.
+
 ### Limitations matrix & Cache
 
 | Users Cache        | Channels Cache     | Limitations                                                                                                                                                                                                                                                                                                                  |
