@@ -98,6 +98,27 @@ type addMessageParams struct {
 	threadTs    string
 	text        string
 	contentType string
+	blocks      []slack.Block
+}
+
+type rawSlackBlock map[string]any
+
+func (b rawSlackBlock) BlockType() slack.MessageBlockType {
+	if typ, ok := b["type"].(string); ok {
+		return slack.MessageBlockType(typ)
+	}
+	return ""
+}
+
+func (b rawSlackBlock) ID() string {
+	if id, ok := b["block_id"].(string); ok {
+		return id
+	}
+	return ""
+}
+
+func (b rawSlackBlock) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any(b))
 }
 
 type addReactionParams struct {
@@ -233,21 +254,26 @@ func (ch *ConversationsHandler) ConversationsAddMessageHandler(ctx context.Conte
 		options = append(options, slack.MsgOptionTS(params.threadTs))
 	}
 
-	switch params.contentType {
-	case "text/plain":
-		options = append(options, slack.MsgOptionDisableMarkdown())
+	if len(params.blocks) > 0 {
 		options = append(options, slack.MsgOptionText(params.text, false))
-	case "text/markdown":
-		blocks, err := slackGoUtil.ConvertMarkdownTextToBlocks(params.text)
-		if err != nil {
-			ch.logger.Warn("Markdown parsing error", zap.Error(err))
+		options = append(options, slack.MsgOptionBlocks(params.blocks...))
+	} else {
+		switch params.contentType {
+		case "text/plain":
 			options = append(options, slack.MsgOptionDisableMarkdown())
 			options = append(options, slack.MsgOptionText(params.text, false))
-		} else {
-			options = append(options, slack.MsgOptionBlocks(blocks...))
+		case "text/markdown":
+			blocks, err := slackGoUtil.ConvertMarkdownTextToBlocks(params.text)
+			if err != nil {
+				ch.logger.Warn("Markdown parsing error", zap.Error(err))
+				options = append(options, slack.MsgOptionDisableMarkdown())
+				options = append(options, slack.MsgOptionText(params.text, false))
+			} else {
+				options = append(options, slack.MsgOptionBlocks(blocks...))
+			}
+		default:
+			return nil, errors.New("content_type must be either 'text/plain' or 'text/markdown'")
 		}
-	default:
-		return nil, errors.New("content_type must be either 'text/plain' or 'text/markdown'")
 	}
 
 	unfurlOpt := os.Getenv("SLACK_MCP_ADD_MESSAGE_UNFURLING")
@@ -1787,10 +1813,6 @@ func (ch *ConversationsHandler) parseParamsToolAddMessage(ctx context.Context, r
 		// Backward compatibility with "payload" parameter
 		msgText = request.GetString("payload", "")
 	}
-	if msgText == "" {
-		ch.logger.Error("Message text missing")
-		return nil, errors.New("text must be a string")
-	}
 
 	contentType := request.GetString("content_type", "text/markdown")
 	if contentType != "text/plain" && contentType != "text/markdown" {
@@ -1798,12 +1820,49 @@ func (ch *ConversationsHandler) parseParamsToolAddMessage(ctx context.Context, r
 		return nil, errors.New("content_type must be either 'text/plain' or 'text/markdown'")
 	}
 
+	blocks, err := parseRawBlocks(request.GetArguments()["blocks"])
+	if err != nil {
+		ch.logger.Error("Invalid blocks", zap.Error(err))
+		return nil, err
+	}
+	if msgText == "" {
+		ch.logger.Error("Message text missing")
+		return nil, errors.New("text or payload must be a string")
+	}
+
 	return &addMessageParams{
 		channel:     channel,
 		threadTs:    threadTs,
 		text:        msgText,
 		contentType: contentType,
+		blocks:      blocks,
 	}, nil
+}
+
+func parseRawBlocks(value any) ([]slack.Block, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("blocks must be a JSON array of Block Kit objects: %w", err)
+	}
+
+	var blockMaps []map[string]any
+	if err := json.Unmarshal(raw, &blockMaps); err != nil {
+		return nil, fmt.Errorf("blocks must be a JSON array of Block Kit objects: %w", err)
+	}
+
+	blocks := make([]slack.Block, 0, len(blockMaps))
+	for i, blockMap := range blockMaps {
+		if blockType, ok := blockMap["type"].(string); !ok || blockType == "" {
+			return nil, fmt.Errorf("blocks[%d].type must be a string", i)
+		}
+		blocks = append(blocks, rawSlackBlock(blockMap))
+	}
+
+	return blocks, nil
 }
 
 func (ch *ConversationsHandler) parseParamsToolReaction(ctx context.Context, request mcp.CallToolRequest) (*addReactionParams, error) {
